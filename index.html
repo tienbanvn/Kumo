@@ -1,0 +1,900 @@
+<script>
+
+// =====================================================
+// DATABASE
+// =====================================================
+
+let db = {
+
+  users:[
+
+    {
+      id:1,
+      name:'Admin',
+      username:'admin',
+      password:'admin123',
+      role:'admin',
+      wallet:999999999999
+    }
+
+  ],
+
+  products:[],
+
+  orders:[],
+
+  deposits:[]
+};
+
+
+
+// =====================================================
+// STORAGE
+// =====================================================
+
+function saveDB(){
+
+  localStorage.setItem(
+    'shop_db',
+    JSON.stringify(db)
+  );
+}
+
+function loadDB(){
+
+  const data =
+    localStorage.getItem('shop_db');
+
+  if(data){
+
+    db = JSON.parse(data);
+  }
+}
+
+loadDB();
+
+
+
+// =====================================================
+// USER
+// =====================================================
+
+let cur =
+
+  JSON.parse(
+    localStorage.getItem('shop_cur')
+  )
+
+  ||
+
+  null;
+
+let curCat = 'all';
+
+let buyProdId = null;
+
+
+
+// =====================================================
+// UTIL
+// =====================================================
+
+function fmt(n){
+
+  return Number(n)
+    .toLocaleString('vi-VN') + 'đ';
+}
+
+function now(){
+
+  return new Date()
+    .toLocaleString('vi-VN');
+}
+
+function toast(msg, err=false){
+
+  const t =
+    document.getElementById('toast');
+
+  if(!t) return;
+
+  t.innerText = msg;
+
+  t.className =
+    'toast show ' +
+    (err ? 'err' : '');
+
+  clearTimeout(t.tt);
+
+  t.tt = setTimeout(() => {
+
+    t.classList.remove('show');
+
+  }, 3000);
+}
+
+
+
+// =====================================================
+// LOGIN
+// =====================================================
+
+function loginOk(user){
+
+  cur = user;
+
+  localStorage.setItem(
+    'shop_cur',
+    JSON.stringify(user)
+  );
+
+  document.getElementById(
+    'authBtns'
+  ).style.display = 'none';
+
+  document.getElementById(
+    'userPanel'
+  ).classList.add('visible');
+
+  document.getElementById(
+    'walletChip'
+  ).classList.add('show');
+
+  document.getElementById(
+    'userNm'
+  ).innerText = user.name;
+
+  document.getElementById(
+    'userAv'
+  ).innerText =
+    user.name.charAt(0);
+
+  if(user.role === 'admin'){
+
+    document.getElementById(
+      'adminNavLink'
+    ).style.display = '';
+  }
+
+  updateWalletDisplay();
+
+  toast('Đăng nhập thành công');
+
+  showPage('home');
+}
+
+function doLogin(){
+
+  const u =
+    document.getElementById('lUser')
+    .value
+    .trim();
+
+  const p =
+    document.getElementById('lPass')
+    .value;
+
+  const user =
+    db.users.find(x =>
+
+      x.username === u
+      &&
+      x.password === p
+    );
+
+  if(!user){
+
+    toast('Sai tài khoản', true);
+
+    return;
+  }
+
+  loginOk(user);
+}
+
+function doRegister(){
+
+  const name =
+    document.getElementById('rName')
+    .value
+    .trim();
+
+  const user =
+    document.getElementById('rUser')
+    .value
+    .trim();
+
+  const pass =
+    document.getElementById('rPass')
+    .value;
+
+  if(
+    !name ||
+    !user ||
+    !pass
+  ){
+
+    toast('Nhập thiếu', true);
+
+    return;
+  }
+
+  if(
+    db.users.find(
+      x => x.username === user
+    )
+  ){
+
+    toast('Username tồn tại', true);
+
+    return;
+  }
+
+  const acc = {
+
+    id: Date.now(),
+
+    name,
+
+    username:user,
+
+    password:pass,
+
+    role:'user',
+
+    wallet:0
+  };
+
+  db.users.push(acc);
+
+  saveDB();
+
+  loginOk(acc);
+}
+
+function logout(){
+
+  cur = null;
+
+  localStorage.removeItem(
+    'shop_cur'
+  );
+
+  document.getElementById(
+    'authBtns'
+  ).style.display = '';
+
+  document.getElementById(
+    'userPanel'
+  ).classList.remove('visible');
+
+  document.getElementById(
+    'walletChip'
+  ).classList.remove('show');
+
+  document.getElementById(
+    'adminNavLink'
+  ).style.display = 'none';
+
+  toast('Đã đăng xuất');
+
+  showPage('home');
+}
+
+
+
+// =====================================================
+// WALLET
+// =====================================================
+
+function updateWalletDisplay(){
+
+  if(!cur) return;
+
+  const user =
+    db.users.find(
+      x => x.id === cur.id
+    );
+
+  if(!user) return;
+
+  // ADMIN VÔ HẠN TIỀN
+  if(user.role === 'admin'){
+
+    user.wallet = 999999999999;
+  }
+
+  cur.wallet = user.wallet;
+
+  localStorage.setItem(
+    'shop_cur',
+    JSON.stringify(cur)
+  );
+
+  document.getElementById(
+    'walletDisplay'
+  ).innerText =
+    fmt(user.wallet);
+}
+
+
+
+// =====================================================
+// CATEGORY
+// =====================================================
+
+function renderCatTabs(){
+
+  const cats = [
+
+    'all',
+
+    ...new Set(
+      db.products.map(p => p.cat)
+    )
+  ];
+
+  const box =
+    document.getElementById('catTabs');
+
+  if(!box) return;
+
+  box.innerHTML =
+
+    cats.map(c => `
+
+      <button
+
+        class="
+          cat-btn
+          ${curCat===c?'active':''}
+        "
+
+        onclick="setCat('${c}')"
+      >
+
+        ${c==='all'?'Tất cả':c}
+
+      </button>
+
+    `).join('');
+}
+
+function setCat(cat){
+
+  curCat = cat;
+
+  renderCatTabs();
+
+  renderProducts(cat);
+}
+
+
+
+// =====================================================
+// PRODUCTS
+// =====================================================
+
+function renderProducts(cat='all'){
+
+  const box =
+    document.getElementById(
+      'productWrap'
+    );
+
+  if(!box) return;
+
+  let arr = db.products;
+
+  if(cat !== 'all'){
+
+    arr = arr.filter(
+      x => x.cat === cat
+    );
+  }
+
+  box.innerHTML =
+
+    arr.map(p => `
+
+      <div class="product-card">
+
+        <div class="product-icon">
+          ${p.icon}
+        </div>
+
+        <div class="product-name">
+          ${p.desc}
+        </div>
+
+        <div class="product-price">
+          ${fmt(p.price)}
+        </div>
+
+        <button
+          class="btn btn-primary"
+          onclick="buyNow(${p.id})"
+        >
+
+          Mua Ngay
+
+        </button>
+
+      </div>
+
+    `).join('');
+}
+
+function buyNow(id){
+
+  if(!cur){
+
+    toast('Đăng nhập trước', true);
+
+    return;
+  }
+
+  buyProdId = id;
+
+  confirmBuy();
+}
+
+
+
+// =====================================================
+// BUY
+// =====================================================
+
+function confirmBuy(){
+
+  const p =
+    db.products.find(
+      x => x.id === buyProdId
+    );
+
+  if(!p) return;
+
+  const user =
+    db.users.find(
+      x => x.id === cur.id
+    );
+
+  if(user.wallet < p.price){
+
+    toast('Không đủ tiền', true);
+
+    return;
+  }
+
+  user.wallet -= p.price;
+
+  db.orders.unshift({
+
+    id:'ORD'+Date.now(),
+
+    userId:cur.id,
+
+    userName:cur.name,
+
+    productId:p.id,
+
+    productName:p.desc,
+
+    price:p.price,
+
+    status:'pending',
+
+    date:now()
+  });
+
+  saveDB();
+
+  updateWalletDisplay();
+
+  renderAdminOrders();
+
+  updateAdminBadges();
+
+  toast('Đã gửi đơn');
+}
+
+
+
+// =====================================================
+// DEPOSIT
+// =====================================================
+
+function submitBankDeposit(){
+
+  const amt = parseInt(
+
+    document.getElementById(
+      'bankAmount'
+    ).value
+
+  );
+
+  if(!amt || amt < 10000){
+
+    toast('Nạp tối thiểu 10k', true);
+
+    return;
+  }
+
+  db.deposits.unshift({
+
+    id:'NAP'+Date.now(),
+
+    userId:cur.id,
+
+    userName:cur.name,
+
+    amount:amt,
+
+    status:'pending',
+
+    date:now()
+  });
+
+  saveDB();
+
+  renderAdminDeposits();
+
+  updateAdminBadges();
+
+  toast('Đã gửi yêu cầu');
+}
+
+
+
+// =====================================================
+// ADD PRODUCT
+// =====================================================
+
+function addProduct(){
+
+  const desc =
+    document.getElementById(
+      'addDesc'
+    ).value.trim();
+
+  const accUser =
+    document.getElementById(
+      'addUser'
+    ).value.trim();
+
+  const accPass =
+    document.getElementById(
+      'addPass'
+    ).value.trim();
+
+  const price =
+    parseInt(
+
+      document.getElementById(
+        'addPrice'
+      ).value
+
+    );
+
+  if(
+    !desc ||
+    !accUser ||
+    !accPass ||
+    !price
+  ){
+
+    toast('Nhập thiếu', true);
+
+    return;
+  }
+
+  if(
+    price < 10000 ||
+    price > 1000000
+  ){
+
+    toast('Giá 10k-1m', true);
+
+    return;
+  }
+
+  db.products.unshift({
+
+    id:Date.now(),
+
+    name:'Acc Game',
+
+    cat:'Kho Acc',
+
+    desc,
+
+    price,
+
+    icon:'🎮',
+
+    accUser,
+
+    accPass,
+
+    status:'available'
+  });
+
+  saveDB();
+
+  renderProducts(curCat);
+
+  renderCatTabs();
+
+  toast('Đã thêm acc');
+
+  document.getElementById(
+    'addDesc'
+  ).value='';
+
+  document.getElementById(
+    'addUser'
+  ).value='';
+
+  document.getElementById(
+    'addPass'
+  ).value='';
+
+  document.getElementById(
+    'addPrice'
+  ).value='';
+}
+
+
+
+// =====================================================
+// ADMIN ORDERS
+// =====================================================
+
+function renderAdminOrders(){
+
+  const tb =
+    document.getElementById(
+      'adminOrderT'
+    );
+
+  if(!tb) return;
+
+  tb.innerHTML =
+
+    db.orders.map(o => `
+
+      <tr>
+
+        <td>${o.id}</td>
+
+        <td>${o.userName}</td>
+
+        <td>${o.productName}</td>
+
+        <td>${fmt(o.price)}</td>
+
+        <td>
+
+          ${
+            o.status === 'pending'
+
+            ?
+
+            `
+            <button
+              class="btn btn-green"
+              onclick="approveOrder('${o.id}')"
+            >
+              Duyệt
+            </button>
+            `
+
+            :
+
+            '✔'
+          }
+
+        </td>
+
+      </tr>
+
+    `).join('');
+}
+
+function approveOrder(id){
+
+  const o =
+    db.orders.find(
+      x => x.id === id
+    );
+
+  if(!o) return;
+
+  o.status = 'approved';
+
+  saveDB();
+
+  renderAdminOrders();
+
+  updateAdminBadges();
+
+  toast('Đã duyệt đơn');
+}
+
+
+
+// =====================================================
+// ADMIN DEPOSIT
+// =====================================================
+
+function renderAdminDeposits(){
+
+  const tb =
+    document.getElementById(
+      'adminDepT'
+    );
+
+  if(!tb) return;
+
+  tb.innerHTML =
+
+    db.deposits.map(d => `
+
+      <tr>
+
+        <td>${d.id}</td>
+
+        <td>${d.userName}</td>
+
+        <td>${fmt(d.amount)}</td>
+
+        <td>
+
+          ${
+            d.status === 'pending'
+
+            ?
+
+            `
+            <button
+              class="btn btn-green"
+              onclick="approveDeposit('${d.id}')"
+            >
+              Duyệt
+            </button>
+            `
+
+            :
+
+            '✔'
+          }
+
+        </td>
+
+      </tr>
+
+    `).join('');
+}
+
+function approveDeposit(id){
+
+  const d =
+    db.deposits.find(
+      x => x.id === id
+    );
+
+  if(!d) return;
+
+  d.status = 'approved';
+
+  const user =
+    db.users.find(
+      x => x.id === d.userId
+    );
+
+  if(user){
+
+    user.wallet += d.amount;
+  }
+
+  saveDB();
+
+  updateWalletDisplay();
+
+  renderAdminDeposits();
+
+  updateAdminBadges();
+
+  toast('Đã cộng tiền');
+}
+
+
+
+// =====================================================
+// BADGES
+// =====================================================
+
+function updateAdminBadges(){
+
+  const o =
+    db.orders.filter(
+      x => x.status === 'pending'
+    ).length;
+
+  const d =
+    db.deposits.filter(
+      x => x.status === 'pending'
+    ).length;
+
+  document.getElementById(
+    'pendingOrderBadge'
+  ).innerText = o;
+
+  document.getElementById(
+    'pendingDepBadge'
+  ).innerText = d;
+}
+
+
+
+// =====================================================
+// PAGE
+// =====================================================
+
+function showPage(id){
+
+  document
+    .querySelectorAll('.page')
+    .forEach(p => {
+
+      p.classList.remove('active');
+
+    });
+
+  document
+    .getElementById('page-'+id)
+    .classList.add('active');
+}
+
+
+
+// =====================================================
+// REALTIME ADMIN
+// =====================================================
+
+setInterval(() => {
+
+  renderAdminOrders();
+
+  renderAdminDeposits();
+
+  updateAdminBadges();
+
+}, 500);
+
+
+
+// =====================================================
+// START
+// =====================================================
+
+window.addEventListener('load', () => {
+
+  renderProducts();
+
+  renderCatTabs();
+
+  renderAdminOrders();
+
+  renderAdminDeposits();
+
+  updateAdminBadges();
+
+  if(cur){
+
+    loginOk(cur);
+  }
+});
+
+</script>
